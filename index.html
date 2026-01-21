@@ -219,9 +219,7 @@ async function saveResultToSheet() {
   if (!LAST_RESULT) throw new Error("No result");
   if (!USER_CLASSIFICATION) throw new Error("No classification");
   if (!SAVE_ENDPOINT || SAVE_ENDPOINT.includes("여기에_")) throw new Error("No endpoint");
-
-  // 공유 링크로 들어온 결과는 counts가 없으니 저장하지 않음
-  if (!LAST_RESULT.counts) return { ok: false, skipped: true };
+  if (!LAST_RESULT.counts) return { ok: false, skipped: true }; // 공유 링크 진입은 저장 생략
 
   const payload = {
     classification: USER_CLASSIFICATION,
@@ -231,6 +229,18 @@ async function saveResultToSheet() {
     ref: qs("t") ? "shared-link" : "quiz",
     userAgent: navigator.userAgent || ""
   };
+
+  // ✅ CORS 회피
+  await fetch(SAVE_ENDPOINT, {
+    method: "POST",
+    mode: "no-cors",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify(payload),
+  });
+
+  // no-cors에선 응답을 읽을 수 없으니 "요청 전송 성공"으로 처리
+  return { ok: true, opaque: true };
+}
 
   const res = await fetch(SAVE_ENDPOINT, {
     method: "POST",
@@ -806,6 +816,7 @@ init();
 </script>
 </body>
 </html>
+
 
 
 
