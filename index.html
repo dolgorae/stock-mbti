@@ -1,6 +1,17 @@
 <!doctype html>
 <html lang="ko">
 <head>
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-VPY33F7X35"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+
+    gtag('config', 'G-XXXXXXXXXX', {
+      anonymize_ip: true
+  });
+  </script>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>주식 MBTI 테스트</title>
@@ -175,6 +186,28 @@
 /* -----------------------------
    ✅ 저장/직군 선택 설정
 ------------------------------ */
+
+function trackResultEvent({ type, counts, classification, fromSharedLink }) {
+  if (typeof gtag !== "function") return;
+
+  // counts가 없으면(공유 링크로 직접 진입) score를 null로
+  const trendScore = counts ? counts.trend.A : null; // 0~3
+  const basisScore = counts ? counts.basis.A : null;
+  const buildScore = counts ? counts.build.A : null;
+  const lossScore  = counts ? counts.loss.A  : null;
+
+  gtag("event", "stock_mbti_result", {
+    result_type: type,                 // 예: UCVX
+    classification: classification || "unknown", // 예: 일반 투자자
+    from_shared_link: !!fromSharedLink,
+
+    // 축별 점수(선택)
+    trend_a: trendScore,
+    basis_a: basisScore,
+    build_a: buildScore,
+    loss_a: lossScore
+  });
+}
 
 // ✅ Apps Script Web App URL로 교체
 const SAVE_ENDPOINT = "https://script.google.com/macros/s/AKfycbw8_3g9dIi-li7eDnCge_Q8Rj-yACJGx1CNTUGAKpKe2Zq4UKXuWpJ1-1139JhTbRvl0A/exec";
@@ -566,6 +599,14 @@ function showResultPage(type, counts, breakdown, fromSharedLink=false) {
       st.textContent = msg;
     }
   })();
+  // 결과 페이지 표시/렌더링 끝난 뒤 어딘가에 추가
+  trackResultEvent({
+    type,
+    counts,
+    classification: window.USER_CLASSIFICATION, // 직군 팝업을 쓰고 있다면
+    fromSharedLink
+  });
+
 
 }
 
@@ -778,6 +819,7 @@ init();
 </script>
 </body>
 </html>
+
 
 
 
