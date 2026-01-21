@@ -48,6 +48,48 @@
 </head>
 
 <body>
+<!-- ✅ 직군 선택 모달 (첫 진입 팝업) -->
+<div id="classModal"
+     style="position:fixed; inset:0; background:rgba(0,0,0,.45); display:none; align-items:center; justify-content:center; z-index:9999;">
+  <div style="width:min(560px, calc(100% - 32px)); background:#fff; border-radius:16px; border:1px solid #ddd; padding:18px;">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+      <div>
+        <div style="font-size:1.2rem; font-weight:800;">시작하기 전에</div>
+        <div style="margin-top:6px; color:#666; font-size:.95rem;">
+          집계용으로 본인 직군을 선택해 주세요. (필수)
+        </div>
+      </div>
+    </div>
+
+    <div style="height:1px; background:#e9e9e9; margin:14px 0;"></div>
+
+    <div style="display:grid; gap:10px;">
+      <label style="display:block; padding:12px; border:1px solid #ddd; border-radius:12px; cursor:pointer;">
+        <input type="radio" name="classification" value="주식 매니저" />
+        <b>주식 매니저</b>
+        <div style="color:#666; font-size:.92rem; margin-top:4px;">PM/운용/자문/트레이딩 등</div>
+      </label>
+
+      <label style="display:block; padding:12px; border:1px solid #ddd; border-radius:12px; cursor:pointer;">
+        <input type="radio" name="classification" value="증권업 관계자" />
+        <b>증권업 관계자</b>
+        <div style="color:#666; font-size:.92rem; margin-top:4px;">리서치/IB/세일즈/브로커리지 등</div>
+      </label>
+
+      <label style="display:block; padding:12px; border:1px solid #ddd; border-radius:12px; cursor:pointer;">
+        <input type="radio" name="classification" value="일반 투자자" />
+        <b>일반 투자자</b>
+        <div style="color:#666; font-size:.92rem; margin-top:4px;">개인 투자자/초보~중급 등</div>
+      </label>
+    </div>
+
+    <div style="display:flex; gap:10px; justify-content:flex-end; align-items:center; margin-top:14px;">
+      <span id="classErr" style="color:#b00020; font-weight:700; margin-right:auto;"></span>
+      <button type="button" id="classConfirmBtn">선택 완료</button>
+    </div>
+  </div>
+</div>
+
 <div class="wrap">
   <!-- INTRO / QUIZ PAGE -->
   <section id="page-quiz" class="card">
@@ -130,6 +172,76 @@
 /* -----------------------------
    데이터: 4축 정의 & 문항
 ------------------------------ */
+/* -----------------------------
+   ✅ 저장/직군 선택 설정
+------------------------------ */
+
+// ✅ Apps Script Web App URL로 교체
+const SAVE_ENDPOINT = "https://script.google.com/macros/s/AKfycbx-lj-OgGPPOoMxE5KXjvDf3cYCYVUuyJaSvrCmClJSvg7Tirh7Cwa8SqjQkiQQJ1R2Fg/exec";
+
+// ✅ 분류(직군) 로컬 저장 키
+const CLASS_KEY = "stock_mbti_classification_v1";
+let USER_CLASSIFICATION = "";
+
+// 로컬스토리지 저장/로드
+function loadClassification() {
+  try { return localStorage.getItem(CLASS_KEY) || ""; } catch { return ""; }
+}
+function saveClassification(cls) {
+  USER_CLASSIFICATION = cls || "";
+  try { localStorage.setItem(CLASS_KEY, USER_CLASSIFICATION); } catch {}
+}
+
+// 모달 열기/닫기 + 설정
+function openClassModal() {
+  const modal = document.getElementById("classModal");
+  const err = document.getElementById("classErr");
+  err.textContent = "";
+  modal.style.display = "flex";
+}
+function closeClassModal() {
+  document.getElementById("classModal").style.display = "none";
+}
+function setupClassModal() {
+  document.getElementById("classConfirmBtn").addEventListener("click", () => {
+    const picked = document.querySelector('input[name="classification"]:checked');
+    if (!picked) {
+      document.getElementById("classErr").textContent = "하나를 선택해 주세요.";
+      return;
+    }
+    saveClassification(picked.value);
+    closeClassModal();
+  });
+}
+
+// ✅ 결과 자동 저장(구글시트)
+async function saveResultToSheet() {
+  if (!LAST_RESULT) throw new Error("No result");
+  if (!USER_CLASSIFICATION) throw new Error("No classification");
+  if (!SAVE_ENDPOINT || SAVE_ENDPOINT.includes("여기에_")) throw new Error("No endpoint");
+
+  // 공유 링크로 들어온 결과는 counts가 없으니 저장하지 않음
+  if (!LAST_RESULT.counts) return { ok: false, skipped: true };
+
+  const payload = {
+    classification: USER_CLASSIFICATION,
+    type: LAST_RESULT.type,
+    axes: LAST_RESULT.type.split("").join(","),
+    counts: LAST_RESULT.counts,
+    ref: qs("t") ? "shared-link" : "quiz",
+    userAgent: navigator.userAgent || ""
+  };
+
+  const res = await fetch(SAVE_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify(payload),
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!json.ok) throw new Error("Save failed");
+  return json;
+}
 
 const AXIS = {
   trend: { A:"U", B:"D", label:"추세 편안함" },
@@ -459,6 +571,30 @@ function showResultPage(type, counts, breakdown, fromSharedLink=false) {
 
   // 문서 타이틀 정도는 업데이트(플랫폼 OG는 보통 정적 메타만 읽지만, 탭/복사 문구엔 도움)
   document.title = `주식 MBTI 결과: ${type}`;
+    // ✅ 결과 자동 저장 (퀴즈 제출 시)
+  (async () => {
+    const st = document.getElementById("shareStatus");
+    try {
+      if (!USER_CLASSIFICATION) {
+        // 혹시 직군 선택이 누락된 경우(예외)
+        openClassModal();
+        st.textContent = "직군을 선택하면 결과가 자동 저장됩니다.";
+        return;
+      }
+
+      const r = await saveResultToSheet();
+      if (r && r.skipped) return; // 공유 링크 진입 등
+
+      st.textContent = "✅ 결과가 자동으로 저장되었습니다!";
+    } catch (e) {
+      // 저장 실패해도 UX는 계속 진행
+      const msg = (String(e && e.message || e)).includes("endpoint")
+        ? "⚠️ 저장 실패: SAVE_ENDPOINT(웹앱 URL)를 설정해 주세요."
+        : "⚠️ 저장 실패: Apps Script 권한/배포(익명 접근) 설정을 확인해 주세요.";
+      st.textContent = msg;
+    }
+  })();
+
 }
 
 function setShareLinks(url, text) {
@@ -645,6 +781,11 @@ document.getElementById("downloadCardBtn").addEventListener("click", () => {
 function init() {
   // 퀴즈는 항상 랜덤 렌더
   renderQuiz(true);
+  
+  setupClassModal();
+  USER_CLASSIFICATION = loadClassification();
+  if (!USER_CLASSIFICATION) openClassModal();
+
 
   const t = (qs("t") || "").toUpperCase().trim();
   if (t && TYPE_DETAILS[t]) {
@@ -665,5 +806,6 @@ init();
 </script>
 </body>
 </html>
+
 
 
