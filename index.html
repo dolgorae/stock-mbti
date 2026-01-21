@@ -177,7 +177,7 @@
 ------------------------------ */
 
 // ✅ Apps Script Web App URL로 교체
-const SAVE_ENDPOINT = "https://script.google.com/macros/s/AKfycbyRkJiPffKjaCfkjimKG66zhQ44aQ8UMiF-POqqhL3p-JAdLiUWO3nRgGLLDx_2_oZKFg/exec";
+const SAVE_ENDPOINT = "https://script.google.com/macros/s/AKfycbw8_3g9dIi-li7eDnCge_Q8Rj-yACJGx1CNTUGAKpKe2Zq4UKXuWpJ1-1139JhTbRvl0A/exec";
 
 // ✅ 분류(직군) 로컬 저장 키
 const CLASS_KEY = "stock_mbti_classification_v1";
@@ -230,7 +230,7 @@ async function saveResultToSheet() {
     userAgent: navigator.userAgent || ""
   };
 
-  // ✅ CORS 회피: 응답을 읽지 않고 "전송"만
+  // ✅ CORS 회피
   await fetch(SAVE_ENDPOINT, {
     method: "POST",
     mode: "no-cors",
@@ -238,9 +238,20 @@ async function saveResultToSheet() {
     body: JSON.stringify(payload),
   });
 
+  // no-cors에선 응답을 읽을 수 없으니 "요청 전송 성공"으로 처리
   return { ok: true, opaque: true };
 }
 
+  const res = await fetch(SAVE_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify(payload),
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!json.ok) throw new Error("Save failed");
+  return json;
+}
 
 const AXIS = {
   trend: { A:"U", B:"D", label:"추세 편안함" },
@@ -805,9 +816,6 @@ init();
 </script>
 </body>
 </html>
-
-
-
 
 
 
